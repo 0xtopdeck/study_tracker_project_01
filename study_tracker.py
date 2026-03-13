@@ -4,6 +4,7 @@ import json
 import os
 import time
 import calendar
+import random
 from datetime import datetime, timedelta
 
 # --- Configuration & Styling ---
@@ -39,12 +40,91 @@ THEMES = {
     }
 }
 
+MOTIVATIONAL_QUOTES = [
+    "The only way to learn a new programming language is by writing programs in it. — Dennis Ritchie",
+    "First, solve the problem. Then, write the code. — John Johnson",
+    "Code is like humor. When you have to explain it, it’s bad. — Cory House",
+    "The best way to predict the future is to create it. — Peter Drucker",
+    "Believe you can and you’re halfway there. — Theodore Roosevelt",
+    "It always seems impossible until it’s done. — Nelson Mandela",
+    "Success is not final, failure is not fatal: it is the courage to continue that counts. — Winston Churchill",
+    "The only way to do great work is to love what you do. — Steve Jobs",
+    "Your time is limited, so don’t waste it living someone else’s life. — Steve Jobs",
+    "Innovation distinguishes between a leader and a follower. — Steve Jobs",
+    "The question of whether machines can think is about as relevant as the question of whether submarines can swim. — Edsger W. Dijkstra",
+    "AI is the new electricity. — Andrew Ng",
+    "Data is the new oil. — Clive Humby",
+    "Programming is the closest thing we have to magic. — Drew Houston",
+    "Every great developer got there by solving problems they were unqualified to solve. — Patrick McKenzie",
+    "Intelligence is the ability to adapt to change. — Stephen Hawking",
+    "Education is not the learning of facts, but the training of the mind to think. — Albert Einstein",
+    "The future belongs to the curious. — Anonymous",
+    "Stay hungry, stay foolish. — Steve Jobs",
+    "The mind is everything. What you think you become. — Buddha",
+    "Don’t stop until you’re proud.",
+    "Small steps every day lead to big results.",
+    "Consistency is the key to mastery.",
+    "Hardships often prepare ordinary people for an extraordinary destiny. — C.S. Lewis",
+    "The people who are crazy enough to think they can change the world are the ones who do. — Rob Siltanen"
+]
+
 PHASES = [
-    {"name": "Phase 1: Python Mastery", "desc": "Python Basics, Pandas, NumPy", "target": 20},
-    {"name": "Phase 2: Essential Math", "desc": "Linear Algebra, Calculus for AI", "target": 20},
-    {"name": "Phase 3: Machine Learning", "desc": "Scikit-Learn, Classic Algorithms", "target": 30},
-    {"name": "Phase 4: Deep Learning", "desc": "PyTorch, HuggingFace, Transformers", "target": 40},
-    {"name": "Phase 5: Portfolio Projects", "desc": "RAG, API Deployment, LLM Apps", "target": 50},
+    {
+        "name": "Phase 1: Python Mastery", 
+        "desc": "Python Basics, Pandas, NumPy", 
+        "target": 20,
+        "roadmap": [
+            ("Core Python Syntax", ["Loops (for/while)", "Conditionals (if/else)", "Functions & *args/**kwargs"]),
+            ("Object Oriented Programming", ["Classes & Objects", "Inheritance & Polymorphism", "Decorators & Generators"]),
+            ("NumPy (The AI Foundation)", ["Arrays & Broadcasting", "Vectorization (Avoiding Loops)", "Universal Functions (ufuncs)"]),
+            ("Pandas (Data Science)", ["DataFrames & Series", "Cleaning (Handling NaNs)", "GroupBy & Pivoting", "Merging/Joining Data"]),
+            ("Data Visualization", ["Matplotlib Pyplot", "Seaborn Styling", "Drawing Error Bars"])
+        ]
+    },
+    {
+        "name": "Phase 2: Essential Math", 
+        "desc": "Linear Algebra, Calculus for AI", 
+        "target": 20,
+        "roadmap": [
+            ("Linear Algebra", ["Matrix Multiplications", "Eigenvalues & Eigenvectors", "Singular Value Decomposition (SVD)"]),
+            ("Calculus for AI", ["Derivatives & Chain Rule", "Partial Derivatives", "Jacobians & Hessians"]),
+            ("Probability & Stats", ["Distributions (Normal, Bernoulli)", "Central Limit Theorem", "Bayes Theorem"]),
+            ("Optimization", ["Gradient Descent Logic", "Learning Rate Schedulers", "Momentum & Adam Optimizers"])
+        ]
+    },
+    {
+        "name": "Phase 3: Machine Learning", 
+        "desc": "Scikit-Learn, Classic Algorithms", 
+        "target": 30,
+        "roadmap": [
+            ("Supervised Learning", ["Linear & Logistic Regression", "Decision Trees & Random Forests", "SVMs & k-NN"]),
+            ("Unsupervised Learning", ["k-Means Clustering", "PCA (Dimensionality Reduction)", "Anomaly Detection"]),
+            ("Model Evaluation", ["Confusion Matrix", "Precision/Recall/F1", "ROC & AUC Curves", "Cross-Validation"]),
+            ("Feature Engineering", ["Scaling (Standard vs MinMax)", "Encoding (One-Hot, Ordinal)", "Handling Outliers"])
+        ]
+    },
+    {
+        "name": "Phase 4: Deep Learning", 
+        "desc": "PyTorch, HuggingFace, Transformers", 
+        "target": 40,
+        "roadmap": [
+            ("Neural Networks", ["Backpropagation", "Activation Functions (ReLU, Softmax)", "Dropout & Regularization"]),
+            ("Computer Vision", ["Convolution Layers (CNNs)", "Pooling & Stride", "Transfer Learning (ResNet/ViT)"]),
+            ("Sequence Models", ["RNNs & LSTMs", "Word Embeddings (Word2Vec)", "Attention Mechanisms"]),
+            ("Transformers", ["Encoder-Decoder Architecture", "Multi-Head Attention", "Positional Encoding", "BERT & GPT Training"])
+        ]
+    },
+    {
+        "name": "Phase 5: Portfolio Projects", 
+        "desc": "RAG, API Deployment, LLM Apps", 
+        "target": 50,
+        "roadmap": [
+            ("LLM Application Layers", ["LangChain & LlamaIndex", "Agents & Tools", "Prompt Engineering Techniques"]),
+            ("RAG Systems", ["Document Loaders", "Vector Embedding Models", "Retrieval Strategies (Top-K)"]),
+            ("Deployment", ["FastAPI Backend", "Dockerizing Apps", "Streamlit/Vercel Frontend", "Monitoring & Logging"]),
+            ("Vector Databases", ["Indexing (HNSW/IVF)", "Metadata Filtering", "Semantic Search"])
+        ]
+    },
 ]
 
 class StudyTrackerApp:
@@ -72,8 +152,11 @@ class StudyTrackerApp:
         self.start_time = None
         self.is_tracking = False
         self.current_view = "dashboard"
+        self.active_roadmap = None
         self.graph_range = "7D" # 7D, Month, Year, Total
         self.reset_confirm_level = 0
+        self.is_fullscreen = False
+        self.prev_geometry = "420x760"
         
         # Calendar State
         now = datetime.now()
@@ -118,6 +201,20 @@ class StudyTrackerApp:
         self.root.update_idletasks()
         self.root.iconify()
 
+    def toggle_fullscreen(self):
+        if not self.is_fullscreen:
+            self.prev_geometry = self.root.geometry()
+            # Get screen size
+            w = self.root.winfo_screenwidth()
+            h = self.root.winfo_screenheight()
+            self.root.geometry(f"{w}x{h}+0+0")
+            self.is_fullscreen = True
+        else:
+            self.root.geometry(self.prev_geometry)
+            self.is_fullscreen = False
+        
+        self.setup_ui()
+
     def load_data(self):
         if os.path.exists(SAVE_FILE):
             try:
@@ -127,6 +224,7 @@ class StudyTrackerApp:
                 pass
         return {
             "daily_logs": {datetime.now().strftime("%Y-%m-%d"): {phase["name"]: 0.0 for phase in PHASES}},
+            "knowledge_log": {phase["name"]: [] for phase in PHASES},
             "settings": {"theme": "Steam"}
         }
 
@@ -194,6 +292,10 @@ class StudyTrackerApp:
         hide_btn.pack(side="right")
         hide_btn.bind("<Button-1>", lambda e: self.minimize_window())
 
+        full_btn = tk.Label(title_bar, text="⛶", fg=self.colors["text"], bg=self.colors["bg"], font=("Segoe UI Symbol", 10, "bold"), padx=10, cursor="hand2")
+        full_btn.pack(side="right")
+        full_btn.bind("<Button-1>", lambda e: self.toggle_fullscreen())
+
         # Header Time Info
         header_info = tk.Frame(self.main_container, bg=self.colors["bg"], pady=8)
         header_info.pack(fill="x")
@@ -215,6 +317,8 @@ class StudyTrackerApp:
             self.render_graphs()
         elif self.current_view == "settings":
             self.render_settings()
+        elif self.current_view == "roadmap":
+            self.render_roadmap()
 
     def switch_view(self, view):
         self.current_view = view
@@ -259,9 +363,26 @@ class StudyTrackerApp:
         tk.Label(self.content_frame, text=f"TOTAL PLAYTIME: {total_sum:.1f} HOURS", 
                  fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 9, "bold")).pack(pady=(0,10))
 
-        for phase in PHASES:
-            card = tk.Frame(self.content_frame, bg=self.colors["card"], padx=12, pady=10)
-            card.pack(fill="x", pady=4)
+        # Motivational Quote
+        quote_frame = tk.Frame(self.content_frame, bg=self.colors["card"], padx=15, pady=10)
+        quote_frame.pack(fill="x", pady=(0, 20))
+        
+        random_quote = random.choice(MOTIVATIONAL_QUOTES)
+        tk.Label(quote_frame, text=f"“{random_quote}”", fg=self.colors["text"], bg=self.colors["card"], 
+                 font=("Verdana", 8, "italic"), wraplength=self.root.winfo_width()-80 if not self.is_fullscreen else 1000).pack()
+
+        # Responsive Layout for phases
+        cards_per_row = 3 if self.is_fullscreen else 1
+        card_container = tk.Frame(self.content_frame, bg=self.colors["bg"])
+        card_container.pack(fill="both", expand=True)
+
+        for i, phase in enumerate(PHASES):
+            card = tk.Frame(card_container, bg=self.colors["card"], padx=12, pady=10)
+            if self.is_fullscreen:
+                card.grid(row=i // 3, column=i % 3, padx=10, pady=10, sticky="nsew")
+                card_container.grid_columnconfigure(i % 3, weight=1)
+            else:
+                card.pack(fill="x", pady=4)
 
             title_row = tk.Frame(card, bg=self.colors["card"])
             title_row.pack(fill="x")
@@ -286,6 +407,10 @@ class StudyTrackerApp:
             btn = tk.Button(ctrl_row, text=btn_text, command=lambda p=phase["name"]: self.toggle_tracking(p), 
                             bg=btn_bg, fg=self.colors["highlight"], relief="flat", font=("Verdana", 7, "bold"), padx=8)
             btn.pack(side="right")
+
+            roadmap_btn = tk.Button(ctrl_row, text="ROADMAP ➔", command=lambda p=phase: self.open_roadmap(p),
+                                    bg=self.colors["card"], fg=self.colors["accent"], relief="flat", font=("Verdana", 7, "bold"))
+            roadmap_btn.pack(side="right", padx=5)
 
             if self.is_tracking and self.active_phase == phase["name"]:
                 status.config(text="● ACTIVE")
@@ -356,6 +481,122 @@ class StudyTrackerApp:
         detail = f"{date_str} ({total:.1f}h)\n" + "\n".join([f"• {p[:15]}: {h:.1f}h" for p, h in logs.items() if h > 0])
         self.date_detail_lbl.config(text=detail)
 
+    def open_roadmap(self, phase):
+        self.active_roadmap = phase
+        self.switch_view("roadmap")
+
+    def render_roadmap(self):
+        phase = self.active_roadmap
+        if not phase: return self.switch_view("dashboard")
+
+        # Scrollable content for deep curriculum
+        canvas = tk.Canvas(self.content_frame, bg=self.colors["bg"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.content_frame, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg=self.colors["bg"])
+
+        # Update scrollregion
+        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        
+        # Create window inside canvas
+        window_id = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        
+        # Sync width
+        def sync_width(event):
+            canvas.itemconfig(window_id, width=event.width)
+        canvas.bind("<Configure>", sync_width)
+        
+        # Mousewheel support
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        # Header
+        back_btn = tk.Button(scroll_frame, text="← BACK TO DASHBOARD", command=lambda: self.switch_view("dashboard"),
+                             bg=self.colors["bg"], fg=self.colors["accent"], relief="flat", font=("Verdana", 8, "bold"))
+        back_btn.pack(anchor="w", pady=(0, 10))
+
+        tk.Label(scroll_frame, text=phase["name"].upper(), fg=self.colors["highlight"], bg=self.colors["bg"], font=("Verdana", 14, "bold")).pack(anchor="w")
+        tk.Label(scroll_frame, text=phase["desc"], fg=self.colors["text"], bg=self.colors["bg"], font=("Verdana", 10, "italic")).pack(anchor="w", pady=(0, 20))
+
+        tk.Label(scroll_frame, text="DEEP-DIVE ROADMAP", fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 10, "bold")).pack(anchor="w", pady=(0, 15))
+
+        # Roadmap Grid
+        for i, (topic, subtopics) in enumerate(phase["roadmap"]):
+            topic_card = tk.Frame(scroll_frame, bg=self.colors["card"], padx=15, pady=15)
+            topic_card.pack(fill="x", pady=10)
+            
+            # Topic Header
+            header = tk.Frame(topic_card, bg=self.colors["card"])
+            header.pack(fill="x")
+            
+            tk.Label(header, text=f"{i+1}", fg=self.colors["bg"], bg=self.colors["accent"], width=3, font=("Verdana", 9, "bold")).pack(side="left", padx=(0, 10))
+            tk.Label(header, text=topic.upper(), fg=self.colors["highlight"], bg=self.colors["card"], font=("Verdana", 10, "bold")).pack(side="left")
+            
+            # Subtopics (Deep Dive)
+            sub_frame = tk.Frame(topic_card, bg=self.colors["card"], padx=40)
+            sub_frame.pack(fill="x", pady=(10, 0))
+            
+            for sub in subtopics:
+                row = tk.Frame(sub_frame, bg=self.colors["card"])
+                row.pack(fill="x", pady=3)
+                tk.Label(row, text="•", fg=self.colors["accent"], bg=self.colors["card"]).pack(side="left")
+                tk.Label(row, text=sub, fg=self.colors["text"], bg=self.colors["card"], font=("Verdana", 9)).pack(side="left", padx=10)
+
+        # Knowledge Log Section
+        log_section = tk.Frame(scroll_frame, bg=self.colors["bg"], pady=30)
+        log_section.pack(fill="x")
+        
+        tk.Label(log_section, text="LEARNING JOURNAL", fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 10, "bold")).pack(anchor="w")
+        
+        input_frame = tk.Frame(log_section, bg=self.colors["card"], padx=15, pady=15)
+        input_frame.pack(fill="x", pady=10)
+        
+        tk.Label(input_frame, text="What did you master today?", fg=self.colors["text"], bg=self.colors["card"], font=("Verdana", 8)).pack(anchor="w")
+        
+        self.note_entry = tk.Entry(input_frame, bg=self.colors["bg"], fg=self.colors["highlight"], insertbackground=self.colors["accent"], relief="flat", font=("Verdana", 10))
+        self.note_entry.pack(fill="x", pady=10)
+        self.note_entry.bind("<Return>", lambda e: self.save_knowledge_note())
+        
+        tk.Button(input_frame, text="LOG KNOWLEDGE", command=self.save_knowledge_note, bg=self.colors["accent"], fg=self.colors["bg"], relief="flat", font=("Verdana", 8, "bold")).pack(side="right")
+
+        # History
+        history_frame = tk.Frame(log_section, bg=self.colors["bg"])
+        history_frame.pack(fill="x", pady=20)
+        
+        log_data = self.data.get("knowledge_log", {}).get(phase["name"], [])
+        if log_data:
+            for log_entry in reversed(log_data):
+                entry_f = tk.Frame(history_frame, bg=self.colors["card"], padx=10, pady=8)
+                entry_f.pack(fill="x", pady=4)
+                
+                tk.Label(entry_f, text=log_entry["date"], fg=self.colors["accent"], bg=self.colors["card"], font=("Verdana", 7, "bold")).pack(anchor="w")
+                tk.Label(entry_f, text=log_entry["note"], fg=self.colors["text"], bg=self.colors["card"], font=("Verdana", 9), wraplength=300 if not self.is_fullscreen else 1000, justify="left").pack(anchor="w")
+        else:
+            tk.Label(history_frame, text="No entries yet. Start logging your wins!", fg=self.colors["text"], bg=self.colors["bg"], font=("Verdana", 8, "italic")).pack(pady=10)
+
+    def save_knowledge_note(self):
+        note = self.note_entry.get().strip()
+        if not note: return
+        
+        phase_name = self.active_roadmap["name"]
+        if "knowledge_log" not in self.data:
+            self.data["knowledge_log"] = {}
+        if phase_name not in self.data["knowledge_log"]:
+            self.data["knowledge_log"][phase_name] = []
+            
+        self.data["knowledge_log"][phase_name].append({
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "note": note
+        })
+        
+        self.save_data()
+        self.render_roadmap() # Refresh view
+
     def render_graphs(self):
         tk.Label(self.content_frame, text="PROGRESS TRENDS", fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 10, "bold")).pack(pady=5)
         
@@ -371,7 +612,8 @@ class StudyTrackerApp:
             btn.pack(side="left", padx=2, expand=True)
 
         # Canvas for Linear Chart
-        self.canvas = tk.Canvas(self.content_frame, width=380, height=300, bg=self.colors["bg"], highlightthickness=0)
+        can_w = 1100 if self.is_fullscreen else 380
+        self.canvas = tk.Canvas(self.content_frame, width=can_w, height=300, bg=self.colors["bg"], highlightthickness=0)
         self.canvas.pack(pady=10)
         
         self.draw_linear_graph()
@@ -442,18 +684,20 @@ class StudyTrackerApp:
 
         # 3. Plot Line
         points = []
-        x_step = 320 / (len(plot_data) - 1) if len(plot_data) > 1 else 0
+        full_w = 1040 if self.is_fullscreen else 320
+        x_step = full_w / (len(plot_data) - 1) if len(plot_data) > 1 else 0
         for i, (label, val) in enumerate(plot_data):
             x = 40 + (i * x_step)
             y = 260 - (val / max_val) * 220
             points.extend([x, y])
             
             # X-axis label (only show some if too many)
-            if len(plot_data) < 15 or i % (len(plot_data)//7 + 1) == 0:
+            label_limit = 30 if self.is_fullscreen else 15
+            if len(plot_data) < label_limit or i % (len(plot_data)//(label_limit//2) + 1) == 0:
                 self.canvas.create_text(x, 280, text=label, fill=self.colors["text"], font=("Verdana", 7))
 
         if len(points) >= 4:
-            self.canvas.create_line(points, fill=self.colors["accent"], width=2, smooth=True)
+            self.canvas.create_line(points, fill=self.colors["accent"], width=3 if self.is_fullscreen else 2, smooth=True)
             # Points
             for i in range(0, len(points), 2):
                 x, y = points[i], points[i+1]
