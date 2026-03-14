@@ -88,6 +88,7 @@ PHASES = [
         "roadmap": [
             ("Linear Algebra", ["Matrix Multiplications", "Eigenvalues & Eigenvectors", "Singular Value Decomposition (SVD)"]),
             ("Calculus for AI", ["Derivatives & Chain Rule", "Partial Derivatives", "Jacobians & Hessians"]),
+            ("Boolean Logic & Gates", ["OR, AND, NOT, NAND, XOR", "Mathematical Gate Formulas", "Logic Gate Composition"]),
             ("Probability & Stats", ["Distributions (Normal, Bernoulli)", "Central Limit Theorem", "Bayes Theorem"]),
             ("Optimization", ["Gradient Descent Logic", "Learning Rate Schedulers", "Momentum & Adam Optimizers"])
         ]
@@ -131,10 +132,16 @@ class StudyTrackerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("AI Study Tracker")
-        self.root.geometry("420x760")
+        self.data = self.load_data()
+        
+        # Load saved or default geometry
+        saved_settings = self.data.get("settings", {})
+        self.width = saved_settings.get("width", 1000)
+        self.height = saved_settings.get("height", 760)
+        
+        self.root.geometry(f"{self.width}x{self.height}")
         
         # Overlay with Taskbar support
-        self.root.attributes("-topmost", True)
         self.root.overrideredirect(True) # Frameless
         
         # Windows Hack for Taskbar visibility
@@ -144,7 +151,7 @@ class StudyTrackerApp:
         self.root.bind("<Map>", self.on_map)
         
         # State
-        self.data = self.load_data()
+        # (self.data already loaded above for geometry)
         self.active_theme = self.data.get("settings", {}).get("theme", "Steam")
         self.colors = THEMES.get(self.active_theme, THEMES["Steam"])
         
@@ -156,16 +163,22 @@ class StudyTrackerApp:
         self.graph_range = "7D" # 7D, Month, Year, Total
         self.reset_confirm_level = 0
         self.is_fullscreen = False
-        self.prev_geometry = "420x760"
+        self.prev_geometry = f"{self.width}x{self.height}"
+        self.search_query = tk.StringVar()
+        self.search_query.trace_add("write", lambda *args: self.render_knowledge_overview())
+        
+        # Resizing state
+        self.resizing = False
         
         # Calendar State
         now = datetime.now()
         self.cal_year = now.year
         self.cal_month = now.month
         
-        # Dragging logic
-        self.root.bind("<Button-1>", self.start_move)
-        self.root.bind("<B1-Motion>", self.do_move)
+        # Dragging & Resizing logic
+        self.root.bind("<Button-1>", self.on_click)
+        self.root.bind("<B1-Motion>", self.on_drag)
+        self.root.bind("<ButtonRelease-1>", self.stop_drag)
         
         self.apply_theme()
         self.tick()
@@ -193,7 +206,6 @@ class StudyTrackerApp:
         # When restoring from taskbar, ensure it's still frameless and in Alt-Tab
         self.root.overrideredirect(True)
         self.set_appwindow()
-        self.root.attributes("-topmost", True)
 
     def minimize_window(self):
         # To minimize a frameless window: turn off frameless, stay in taskbar, then iconify
@@ -225,11 +237,13 @@ class StudyTrackerApp:
         return {
             "daily_logs": {datetime.now().strftime("%Y-%m-%d"): {phase["name"]: 0.0 for phase in PHASES}},
             "knowledge_log": {phase["name"]: [] for phase in PHASES},
-            "settings": {"theme": "Steam"}
+            "settings": {"theme": "Steam", "width": 1000, "height": 760}
         }
 
     def save_data(self):
-        self.data["settings"] = {"theme": self.active_theme}
+        self.data["settings"]["theme"] = self.active_theme
+        self.data["settings"]["width"] = self.width
+        self.data["settings"]["height"] = self.height
         with open(SAVE_FILE, "w") as f:
             json.dump(self.data, f)
 
@@ -270,7 +284,7 @@ class StudyTrackerApp:
         nav_container = tk.Frame(title_bar, bg=self.colors["bg"])
         nav_container.pack(side="left", padx=5)
         
-        nav_items = [("DASH", "⊞", "dashboard"), ("CAL", "📅", "calendar"), ("STAT", "📊", "graphs"), ("SET", "⚙", "settings")]
+        nav_items = [("DASH", "NAV", "dashboard"), ("CAL", "CAL", "calendar"), ("LEARN", "KNOWLEDGE", "knowledge_overview"), ("STAT", "STATS", "graphs"), ("SET", "SETTINGS", "settings")]
         for text, icon, view in nav_items:
             is_active = self.current_view == view
             color = self.colors["accent"] if is_active else self.colors["text"]
@@ -284,15 +298,15 @@ class StudyTrackerApp:
             l.bind("<Button-1>", lambda e, v=view: self.switch_view(v))
 
         # Close/Minimize Buttons
-        close_btn = tk.Label(title_bar, text="✕", fg=self.colors["text"], bg=self.colors["bg"], font=("Segoe UI Symbol", 10, "bold"), padx=10, cursor="hand2")
+        close_btn = tk.Label(title_bar, text="X", fg=self.colors["text"], bg=self.colors["bg"], font=("Segoe UI Symbol", 10, "bold"), padx=10, cursor="hand2")
         close_btn.pack(side="right")
         close_btn.bind("<Button-1>", lambda e: self.root.destroy())
 
-        hide_btn = tk.Label(title_bar, text="—", fg=self.colors["text"], bg=self.colors["bg"], font=("Segoe UI Symbol", 10, "bold"), padx=10, cursor="hand2")
+        hide_btn = tk.Label(title_bar, text="-", fg=self.colors["text"], bg=self.colors["bg"], font=("Segoe UI Symbol", 10, "bold"), padx=10, cursor="hand2")
         hide_btn.pack(side="right")
         hide_btn.bind("<Button-1>", lambda e: self.minimize_window())
 
-        full_btn = tk.Label(title_bar, text="⛶", fg=self.colors["text"], bg=self.colors["bg"], font=("Segoe UI Symbol", 10, "bold"), padx=10, cursor="hand2")
+        full_btn = tk.Label(title_bar, text="FS", fg=self.colors["text"], bg=self.colors["bg"], font=("Segoe UI Symbol", 10, "bold"), padx=10, cursor="hand2")
         full_btn.pack(side="right")
         full_btn.bind("<Button-1>", lambda e: self.toggle_fullscreen())
 
@@ -319,6 +333,8 @@ class StudyTrackerApp:
             self.render_settings()
         elif self.current_view == "roadmap":
             self.render_roadmap()
+        elif self.current_view == "knowledge_overview":
+            self.render_knowledge_overview()
 
     def switch_view(self, view):
         self.current_view = view
@@ -408,12 +424,18 @@ class StudyTrackerApp:
                             bg=btn_bg, fg=self.colors["highlight"], relief="flat", font=("Verdana", 7, "bold"), padx=8)
             btn.pack(side="right")
 
-            roadmap_btn = tk.Button(ctrl_row, text="ROADMAP ➔", command=lambda p=phase: self.open_roadmap(p),
+            roadmap_btn = tk.Button(ctrl_row, text="ROADMAP >", command=lambda p=phase: self.open_roadmap(p),
                                     bg=self.colors["card"], fg=self.colors["accent"], relief="flat", font=("Verdana", 7, "bold"))
             roadmap_btn.pack(side="right", padx=5)
 
+            # Map phase name to notebook filename
+            nb_filename = phase["name"].replace(": ", "_").replace(" ", "_") + ".ipynb"
+            nb_btn = tk.Button(ctrl_row, text="MASTER NOTEBOOK", command=lambda f=nb_filename: self.open_notebook(f),
+                                 bg=self.colors["card"], fg=self.colors["positive"], relief="flat", font=("Verdana", 7, "bold"))
+            nb_btn.pack(side="right", padx=5)
+
             if self.is_tracking and self.active_phase == phase["name"]:
-                status.config(text="● ACTIVE")
+                status.config(text="ACTIVE")
                 card.config(highlightbackground=self.colors["accent"], highlightthickness=1)
 
     def render_calendar(self):
@@ -516,7 +538,7 @@ class StudyTrackerApp:
         canvas.pack(side="left", fill="both", expand=True)
 
         # Header
-        back_btn = tk.Button(scroll_frame, text="← BACK TO DASHBOARD", command=lambda: self.switch_view("dashboard"),
+        back_btn = tk.Button(scroll_frame, text="< BACK TO DASHBOARD", command=lambda: self.switch_view("dashboard"),
                              bg=self.colors["bg"], fg=self.colors["accent"], relief="flat", font=("Verdana", 8, "bold"))
         back_btn.pack(anchor="w", pady=(0, 10))
 
@@ -578,6 +600,93 @@ class StudyTrackerApp:
                 tk.Label(entry_f, text=log_entry["note"], fg=self.colors["text"], bg=self.colors["card"], font=("Verdana", 9), wraplength=300 if not self.is_fullscreen else 1000, justify="left").pack(anchor="w")
         else:
             tk.Label(history_frame, text="No entries yet. Start logging your wins!", fg=self.colors["text"], bg=self.colors["bg"], font=("Verdana", 8, "italic")).pack(pady=10)
+
+    def render_knowledge_overview(self):
+        # Header & Search
+        header_f = tk.Frame(self.content_frame, bg=self.colors["bg"])
+        header_f.pack(fill="x", pady=(0, 10))
+        
+        tk.Label(header_f, text="KNOWLEDGE REPOSITORY", fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 14, "bold")).pack(side="left")
+        
+        search_f = tk.Frame(self.content_frame, bg=self.colors["card"], padx=10, pady=5)
+        search_f.pack(fill="x", pady=(0, 15))
+        
+        tk.Label(search_f, text="SEARCH", fg=self.colors["text"], bg=self.colors["card"]).pack(side="left")
+        search_entry = tk.Entry(search_f, textvariable=self.search_query, bg=self.colors["card"], fg=self.colors["highlight"], 
+                                insertbackground=self.colors["accent"], relief="flat", font=("Verdana", 9))
+        search_entry.pack(side="left", fill="x", expand=True, padx=5)
+        
+        if not self.search_query.get():
+            search_entry.insert(0, "Search by keyword or code...")
+            search_entry.config(fg=self.colors["text"])
+            search_entry.bind("<FocusIn>", lambda e: (search_entry.delete(0, tk.END), search_entry.config(fg=self.colors["highlight"])) if self.search_query.get() == "" else None)
+
+        # Scrollable area
+        canvas = tk.Canvas(self.content_frame, bg=self.colors["bg"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.content_frame, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg=self.colors["bg"])
+
+        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        window_id = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        
+        def sync_width(event):
+            canvas.itemconfig(window_id, width=event.width)
+        canvas.bind("<Configure>", sync_width)
+        
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        # Collect all logs and sort by date
+        all_logs = []
+        query = self.search_query.get().lower()
+
+        for phase_name, logs in self.data.get("knowledge_log", {}).items():
+            for log in logs:
+                if not query or query in log["note"].lower() or query in phase_name.lower():
+                    all_logs.append({**log, "phase": phase_name})
+        
+        # Sort by date (YYYY-MM-DD HH:MM) descending
+        all_logs.sort(key=lambda x: x["date"], reverse=True)
+
+        if not all_logs:
+            tk.Label(scroll_frame, text="No knowledge logged yet. Keep studying!", fg=self.colors["text"], bg=self.colors["bg"], font=("Verdana", 9, "italic")).pack(pady=50)
+            return
+
+        for log in all_logs:
+            card = tk.Frame(scroll_frame, bg=self.colors["card"], padx=15, pady=15)
+            card.pack(fill="x", pady=5)
+            
+            top_row = tk.Frame(card, bg=self.colors["card"])
+            top_row.pack(fill="x")
+            
+            tk.Label(top_row, text=log["phase"].upper(), fg=self.colors["accent"], bg=self.colors["card"], font=("Verdana", 7, "bold")).pack(side="left")
+            tk.Label(top_row, text=log["date"], fg=self.colors["text"], bg=self.colors["card"], font=("Verdana", 7)).pack(side="right")
+            
+            # Note with wraplength
+            note_lbl = tk.Label(card, text=log["note"], fg=self.colors["highlight"], bg=self.colors["card"], font=("Verdana", 9), justify="left", wraplength=350 if not self.is_fullscreen else 1100)
+            note_lbl.pack(anchor="w", pady=(10, 0))
+            
+            # Detect code/formulas and style them if possible (simple split)
+            if "def " in log["note"] or "AND=" in log["note"]:
+                note_lbl.config(font=("Consolas", 9) if not self.is_fullscreen else ("Consolas", 10))
+
+    def open_notebook(self, filename):
+        try:
+            # Use script directory for relative file lookups
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            full_path = os.path.join(script_dir, filename)
+            
+            if os.path.exists(full_path):
+                os.startfile(os.path.normpath(full_path))
+            else:
+                messagebox.showerror("Error", f"Notebook file not found at:\n{full_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Windows could not launch the notebook.\n\nError: {e}\n\nTip: Ensure you have an app like VS Code or a browser associated with .ipynb files.")
 
     def save_knowledge_note(self):
         note = self.note_entry.get().strip()
@@ -713,6 +822,23 @@ class StudyTrackerApp:
                             fg=self.colors["highlight"], relief="flat", font=("Verdana", 8), width=20, pady=5)
             btn.pack(pady=2)
 
+        tk.Label(self.content_frame, text="WINDOW DIMENSIONS", fg=self.colors["text"], bg=self.colors["bg"], font=("Verdana", 8, "bold")).pack(pady=(20, 5))
+        
+        dim_frame = tk.Frame(self.content_frame, bg=self.colors["bg"])
+        dim_frame.pack(pady=5)
+        
+        tk.Label(dim_frame, text="W:", fg=self.colors["text"], bg=self.colors["bg"]).pack(side="left")
+        self.w_entry = tk.Entry(dim_frame, width=5, bg=self.colors["card"], fg=self.colors["highlight"], relief="flat")
+        self.w_entry.insert(0, str(self.width))
+        self.w_entry.pack(side="left", padx=5)
+        
+        tk.Label(dim_frame, text="H:", fg=self.colors["text"], bg=self.colors["bg"]).pack(side="left")
+        self.h_entry = tk.Entry(dim_frame, width=5, bg=self.colors["card"], fg=self.colors["highlight"], relief="flat")
+        self.h_entry.insert(0, str(self.height))
+        self.h_entry.pack(side="left", padx=5)
+        
+        tk.Button(dim_frame, text="APPLY", command=self.apply_dimensions, bg=self.colors["accent"], fg=self.colors["bg"], relief="flat", font=("Verdana", 7, "bold"), padx=10).pack(side="left", padx=10)
+
         tk.Frame(self.content_frame, bg=self.colors["text"], height=1).pack(fill="x", pady=20)
         
         reset_btn_text = "RESET ALL DATA"
@@ -733,6 +859,19 @@ class StudyTrackerApp:
         self.save_data()
         self.apply_theme()
 
+    def apply_dimensions(self):
+        try:
+            w = int(self.w_entry.get())
+            h = int(self.h_entry.get())
+            if w < 400 or h < 400:
+                raise ValueError("Too small")
+            self.width, self.height = w, h
+            self.root.geometry(f"{self.width}x{self.height}")
+            self.save_data()
+            self.setup_ui()
+        except:
+            messagebox.showerror("Error", "Invalid dimensions. Minimum: 400x400.")
+
     def handle_reset(self):
         self.reset_confirm_level += 1
         if self.reset_confirm_level >= 3:
@@ -747,13 +886,40 @@ class StudyTrackerApp:
         self.reset_confirm_level = 0
         self.setup_ui()
 
-    def start_move(self, event):
-        self.x = event.x; self.y = event.y
+    def on_click(self, event):
+        # Determine if we are resizing (bottom right corner) or moving
+        self.start_x = event.x_root
+        self.start_y = event.y_root
+        self.start_width = self.root.winfo_width()
+        self.start_height = self.root.winfo_height()
+        
+        # Resize grip area (bottom 20px, right 20px)
+        if event.x > self.start_width - 20 and event.y > self.start_height - 20:
+            self.resizing = True
+        else:
+            self.resizing = False
+            self.x = event.x
+            self.y = event.y
 
-    def do_move(self, event):
-        deltax = event.x - self.x; deltay = event.y - self.y
-        x = self.root.winfo_x() + deltax; y = self.root.winfo_y() + deltay
-        self.root.geometry(f"+{x}+{y}")
+    def on_drag(self, event):
+        if self.resizing:
+            new_width = max(400, self.start_width + (event.x_root - self.start_x))
+            new_height = max(400, self.start_height + (event.y_root - self.start_y))
+            self.root.geometry(f"{new_width}x{new_height}")
+            self.width, self.height = new_width, new_height
+            # Don't save on every tick for performance, just update state
+        else:
+            # Move Logic
+            deltax = event.x - self.x
+            deltay = event.y - self.y
+            x = self.root.winfo_x() + deltax
+            y = self.root.winfo_y() + deltay
+            self.root.geometry(f"+{x}+{y}")
+            
+    def stop_drag(self, event):
+        if self.resizing:
+            self.save_data() # Save dimensions on release
+        self.resizing = False
 
     def toggle_tracking(self, phase_name):
         if self.is_tracking and self.active_phase == phase_name:
