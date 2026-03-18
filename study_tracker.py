@@ -175,6 +175,10 @@ class StudyTrackerApp:
         self.cal_year = now.year
         self.cal_month = now.month
         
+        # Algorithm Compass State
+        self.compass_state = {"trait": None, "constraint": None}
+        self.compass_result = None
+        
         # Dragging & Resizing logic
         self.root.bind("<Button-1>", self.on_click)
         self.root.bind("<B1-Motion>", self.on_drag)
@@ -255,6 +259,29 @@ class StudyTrackerApp:
                     totals[phase] += hours
         return totals
 
+    def count_objectives_recursive(self, items):
+        """
+        Recursively counts items in a nested list/tuple structure.
+        Base Case: The item is a string (1 objective).
+        Recursive Step: The item is a collection (sum of counts of its elements).
+        """
+        if isinstance(items, str):
+            return 1
+        
+        count = 0
+        if isinstance(items, (list, tuple)):
+            for item in items:
+                # If it's a tuple (Topic, [Subtopics]), we process both
+                if isinstance(item, tuple):
+                    # For the roadmap structure specifically:
+                    # item[0] is the topic name (string)
+                    # item[1] is the list of subtopics
+                    count += self.count_objectives_recursive(item[0]) # Count the topic
+                    count += self.count_objectives_recursive(item[1]) # Count subtopics
+                else:
+                    count += self.count_objectives_recursive(item)
+        return count
+
     def apply_theme(self):
         self.colors = THEMES.get(self.active_theme, THEMES["Steam"])
         self.root.configure(bg=self.colors["bg"])
@@ -284,7 +311,14 @@ class StudyTrackerApp:
         nav_container = tk.Frame(title_bar, bg=self.colors["bg"])
         nav_container.pack(side="left", padx=5)
         
-        nav_items = [("DASH", "NAV", "dashboard"), ("CAL", "CAL", "calendar"), ("LEARN", "KNOWLEDGE", "knowledge_overview"), ("STAT", "STATS", "graphs"), ("SET", "SETTINGS", "settings")]
+        nav_items = [
+            ("DASH", "NAV", "dashboard"), 
+            ("CAL", "CAL", "calendar"), 
+            ("COMPASS", "LOGIC", "compass"), 
+            ("LEARN", "KNOWLEDGE", "knowledge_overview"), 
+            ("STAT", "STATS", "graphs"), 
+            ("SET", "SETTINGS", "settings")
+        ]
         for text, icon, view in nav_items:
             is_active = self.current_view == view
             color = self.colors["accent"] if is_active else self.colors["text"]
@@ -335,6 +369,8 @@ class StudyTrackerApp:
             self.render_roadmap()
         elif self.current_view == "knowledge_overview":
             self.render_knowledge_overview()
+        elif self.current_view == "compass":
+            self.render_algorithm_compass()
 
     def switch_view(self, view):
         self.current_view = view
@@ -378,6 +414,24 @@ class StudyTrackerApp:
 
         tk.Label(self.content_frame, text=f"TOTAL PLAYTIME: {total_sum:.1f} HOURS", 
                  fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 9, "bold")).pack(pady=(0,10))
+
+        # Quick Actions Row
+        qa_frame = tk.Frame(self.content_frame, bg=self.colors["bg"])
+        qa_frame.pack(fill="x", pady=(0, 15))
+        
+        btn_spark = tk.Button(qa_frame, text="AI SPARK (RECALL)", command=self.show_ai_spark, 
+                               bg=self.colors["card"], fg=self.colors["accent"], relief="flat", 
+                               font=("Verdana", 7, "bold"), padx=10, pady=5)
+        btn_spark.pack(side="left", expand=True, padx=5)
+        
+        pulse_text = "DS PULSE (+15M)"
+        if self.is_tracking:
+            pulse_text = f"LOG 15M TO {self.active_phase[:10]}..."
+            
+        btn_pulse = tk.Button(qa_frame, text=pulse_text, command=self.log_micro_pulse, 
+                               bg=self.colors["card"], fg=self.colors["positive"], relief="flat", 
+                               font=("Verdana", 7, "bold"), padx=10, pady=5)
+        btn_pulse.pack(side="left", expand=True, padx=5)
 
         # Motivational Quote
         quote_frame = tk.Frame(self.content_frame, bg=self.colors["card"], padx=15, pady=10)
@@ -543,7 +597,12 @@ class StudyTrackerApp:
         back_btn.pack(anchor="w", pady=(0, 10))
 
         tk.Label(scroll_frame, text=phase["name"].upper(), fg=self.colors["highlight"], bg=self.colors["bg"], font=("Verdana", 14, "bold")).pack(anchor="w")
-        tk.Label(scroll_frame, text=phase["desc"], fg=self.colors["text"], bg=self.colors["bg"], font=("Verdana", 10, "italic")).pack(anchor="w", pady=(0, 20))
+        tk.Label(scroll_frame, text=phase["desc"], fg=self.colors["text"], bg=self.colors["bg"], font=("Verdana", 10, "italic")).pack(anchor="w", pady=(0, 10))
+
+        # Show recursive count
+        total_obj = self.count_objectives_recursive(phase["roadmap"])
+        tk.Label(scroll_frame, text=f"OBJECTIVES DETECTED: {total_obj} (RECURSIVE SCAN)", 
+                 fg=self.colors["positive"], bg=self.colors["bg"], font=("Verdana", 8, "bold")).pack(anchor="w", pady=(0, 10))
 
         tk.Label(scroll_frame, text="DEEP-DIVE ROADMAP", fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 10, "bold")).pack(anchor="w", pady=(0, 15))
 
@@ -886,6 +945,104 @@ class StudyTrackerApp:
         self.reset_confirm_level = 0
         self.setup_ui()
 
+    def render_algorithm_compass(self):
+        tk.Label(self.content_frame, text="ALGORITHM COMPASS", fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 14, "bold")).pack(pady=(0, 10))
+        tk.Label(self.content_frame, text="Select your problem traits to find the right mental model.", fg=self.colors["text"], bg=self.colors["bg"], font=("Verdana", 8, "italic")).pack(pady=(0, 20))
+
+        # Main Layout
+        compass_container = tk.Frame(self.content_frame, bg=self.colors["bg"])
+        compass_container.pack(fill="both", expand=True)
+
+        # Stage 1: Problem Traits
+        traits_frame = tk.LabelFrame(compass_container, text=" STEP 1: PROBLEM TRAITS ", fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 8, "bold"), padx=15, pady=15, relief="flat", highlightbackground=self.colors["card"], highlightthickness=1)
+        traits_frame.pack(side="left", fill="both", expand=True, padx=10)
+
+        traits = [
+            ("Compare Neighbors", "neighbors"),
+            ("Modify List Size", "mutation"),
+            ("Linear Search", "search"),
+            ("Unordered Data", "unordered")
+        ]
+
+        for text, key in traits:
+            is_sel = self.compass_state.get("trait") == key
+            btn = tk.Button(traits_frame, text=text.upper(), command=lambda k=key: self.set_compass_state("trait", k),
+                            bg=self.colors["accent"] if is_sel else self.colors["card"],
+                            fg=self.colors["bg"] if is_sel else self.colors["highlight"],
+                            font=("Verdana", 7, "bold"), relief="flat", pady=8)
+            btn.pack(fill="x", pady=5)
+
+        # Stage 2: Performance Constraints
+        const_frame = tk.LabelFrame(compass_container, text=" STEP 2: CONSTRAINTS ", fg=self.colors["accent"], bg=self.colors["bg"], font=("Verdana", 8, "bold"), padx=15, pady=15, relief="flat", highlightbackground=self.colors["card"], highlightthickness=1)
+        const_frame.pack(side="left", fill="both", expand=True, padx=10)
+
+        constraints = [
+            ("Speed Matters (Big Data)", "speed"),
+            ("Memory Matters", "memory"),
+            ("Simple Logic (Small Data)", "simple")
+        ]
+
+        for text, key in constraints:
+            is_sel = self.compass_state.get("constraint") == key
+            btn = tk.Button(const_frame, text=text.upper(), command=lambda k=key: self.set_compass_state("constraint", k),
+                            bg=self.colors["accent"] if is_sel else self.colors["card"],
+                            fg=self.colors["bg"] if is_sel else self.colors["highlight"],
+                            font=("Verdana", 7, "bold"), relief="flat", pady=8)
+            btn.pack(fill="x", pady=5)
+
+        # Result Frame
+        result_frame = tk.Frame(self.content_frame, bg=self.colors["card"], padx=20, pady=20)
+        result_frame.pack(fill="x", pady=20)
+
+        if self.compass_state["trait"] and self.compass_state["constraint"]:
+            rec = self.calculate_compass_recommendation()
+            tk.Label(result_frame, text="RECOMMENDED MENTAL MODEL:", fg=self.colors["accent"], bg=self.colors["card"], font=("Verdana", 8, "bold")).pack()
+            tk.Label(result_frame, text=rec["title"], fg=self.colors["highlight"], bg=self.colors["card"], font=("Verdana", 12, "bold")).pack(pady=5)
+            tk.Label(result_frame, text=rec["desc"], fg=self.colors["text"], bg=self.colors["card"], font=("Verdana", 9), wraplength=400 if not self.is_fullscreen else 1000).pack()
+            
+            btn_reset = tk.Button(result_frame, text="RESET COMPASS", command=self.reset_compass, bg=self.colors["bg"], fg=self.colors["text"], relief="flat", font=("Verdana", 7, "bold"), pady=5)
+            btn_reset.pack(pady=(15, 0))
+        else:
+            tk.Label(result_frame, text="Awaiting selections to calibrate compass...", fg=self.colors["text"], bg=self.colors["card"], font=("Verdana", 9, "italic")).pack()
+
+    def set_compass_state(self, key, value):
+        self.compass_state[key] = value
+        self.setup_ui()
+
+    def reset_compass(self):
+        self.compass_state = {"trait": None, "constraint": None}
+        self.setup_ui()
+
+    def calculate_compass_recommendation(self):
+        t = self.compass_state["trait"]
+        c = self.compass_state["constraint"]
+
+        if t == "mutation":
+             return {
+                "title": "THE XOR-SIEVE (BACKWARD POINTER)",
+                "desc": "Since you are modifying the list size while comparing, you must loop BACKWARD. Use XOR for bitwise equality to keep it fast like you did today!"
+            }
+        if t == "neighbors":
+            return {
+                "title": "THE SLIDING WINDOW (INDEX POINTER)",
+                "desc": "Use 'range(len(arr) - 1)' to compare arr[i] with arr[i+1]. You are a pointer looking at two cards at once."
+            }
+        if t == "search" and c == "speed":
+            return {
+                "title": "THE BINARY DIVIDER (O(log n))",
+                "desc": "If the data is sorted, don't scan! Jump to the middle and cut the problem in half every step."
+            }
+        if t == "unordered" and c == "speed":
+            return {
+                "title": "THE HASH MAP (DICTIONARY)",
+                "desc": "Use a Dictionary to 'remember' what you've seen. This turns a slow O(n^2) search into a lighting fast O(n) scan."
+            }
+        
+        return {
+            "title": "THE LINEAR SCANNER (ELEMENTS)",
+            "desc": "A simple 'for element in list' is best here. It's clean, readable, and perfectly efficient for standard tasks."
+        }
+
     def on_click(self, event):
         # Determine if we are resizing (bottom right corner) or moving
         self.start_x = event.x_root
@@ -935,6 +1092,34 @@ class StudyTrackerApp:
     def stop_tracking(self):
         if self.active_phase: self.save_data()
         self.is_tracking = False; self.active_phase = None; self.start_time = None
+
+    def log_micro_pulse(self):
+        if not self.active_phase:
+            messagebox.showinfo("Micro Pulse", "Please START a phase session first to log a 15m pulse to it.")
+            return
+        
+        today = datetime.now().strftime("%Y-%m-%d")
+        if today not in self.data["daily_logs"]:
+             self.data["daily_logs"][today] = {phase["name"]: 0.0 for phase in PHASES}
+        
+        self.data["daily_logs"][today][self.active_phase] += 0.25
+        self.save_data()
+        self.setup_ui()
+        messagebox.showinfo("Success", f"Logged 0.25h to {self.active_phase}")
+
+    def show_ai_spark(self):
+        all_notes = []
+        for phase_name, notes in self.data.get("knowledge_log", {}).items():
+            for n in notes:
+                all_notes.append((phase_name, n))
+        
+        if not all_notes:
+            messagebox.showinfo("AI Spark", "No knowledge notes found yet. Log some wins in the Roadmap view first.")
+            return
+            
+        phase, note = random.choice(all_notes)
+        spark_text = f"RECALL FROM {phase.upper()}:\n\n{note['note']}"
+        messagebox.showinfo("AI Spark - Knowledge Recall", spark_text)
 
     def tick(self):
         if self.is_tracking and self.active_phase:
